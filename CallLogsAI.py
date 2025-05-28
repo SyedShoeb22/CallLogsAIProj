@@ -2,42 +2,40 @@ import os
 import re
 import shutil
 from pathlib import Path
+import calendar
 
-def organize_call_recordings(source_dir, target_dir="."):
+def organize_call_recordings(source_dir, destination_base="."):
     source_dir = Path(source_dir)
-    target_dir = Path(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
+    destination_base = Path(destination_base)
+    destination_base.mkdir(parents=True, exist_ok=True)
 
-    for file in source_dir.iterdir():
-        if not file.name.lower().startswith("call recording") or not file.name.endswith(".m4a"):
-            continue
+    for file in source_dir.glob("Call recording *.m4a"):
+        filename = file.name.replace("Call recording ", "", 1)
 
-        # Remove "Call recording " prefix
-        raw_name = file.name.replace("Call recording ", "", 1)
-
-        # Match date pattern _YYMMDD_
-        match = re.search(r"_(\d{6})_", raw_name)
+        # Extract date part from filename
+        match = re.search(r"_(\d{6})_", filename)
         if not match:
-            print(f"Skipping file with invalid format: {file.name}")
+            print(f"Skipping file due to invalid format: {filename}")
             continue
 
-        date_part = match.group(1)  # e.g., 250420
-        month = date_part[2:4]      # Extract MM
+        date_str = match.group(1)  # e.g., "250420"
+        year = "20" + date_str[:2]
+        month_num = int(date_str[2:4])
+        month_name = calendar.month_abbr[month_num]
+        month_folder = f"{month_name}_{year}"
 
-        # Extract caller name/number
-        caller = raw_name.split(f"_{date_part}_")[0]
-        caller = caller.replace("+91", "").strip()
+        # Extract caller name or number (before date part)
+        caller = filename.split(f"_{date_str}_")[0].replace("+91", "").strip()
 
-        # Build target path
-        caller_folder = target_dir / caller
-        month_folder = caller_folder / f"Month_{month}"
-        month_folder.mkdir(parents=True, exist_ok=True)
+        # Create destination folder
+        destination_folder = destination_base / caller / month_folder
+        destination_folder.mkdir(parents=True, exist_ok=True)
 
-        # New filename without "Call recording "
-        new_filename = raw_name
+        # Move file
+        new_file_path = destination_folder / filename
+        shutil.move(str(file), new_file_path)
 
-        # Move the file
-        shutil.move(str(file), month_folder / new_filename)
-        print(f"Moved: {file.name} -> {month_folder / new_filename}")
+        print(f"Moved: {file.name} -> {new_file_path}")
 
-organize_call_recordings("recordings_folder", "organized_calls")
+# Example usage:
+organize_call_recordings("CallRecs", "organized_calls")
