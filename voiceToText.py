@@ -1,33 +1,44 @@
 import os
-import speech_recognition as sr
-from pydub import AudioSegment
+import shutil
+from datetime import datetime
+import subprocess
 
-def convert_m4a_to_wav(m4a_path, wav_path):
-    audio = AudioSegment.from_file(m4a_path, format="m4a")
-    audio.export(wav_path, format="wav")
+source_folder = r"/data/data/com.termux/files/home/downloads"
+destination_base = r"/data/data/com.termux/files/home/downloads/CallrecProj"
 
-def transcribe_audio(file_path):
-    recognizer = sr.Recognizer()
+def organize_recordings():
+    os.makedirs(destination_base, exist_ok=True)
 
-    # Convert m4a to wav
-    wav_path = file_path.replace(".m4a", ".wav")
-    convert_m4a_to_wav(file_path, wav_path)
+    for file in os.listdir(source_folder):
+        if file.endswith(".m4a") and file.startswith("Call recording"):
+            # Remove prefix and extension
+            filename = file.replace("Call recording ", "").replace(".m4a", "")
 
-    # Load and recognize
-    with sr.AudioFile(wav_path) as source:
-        audio_data = recognizer.record(source)
+            # filename = "DIM Ujjwal Porwal_250420_152358"
+            parts = filename.rsplit("_", 2)
+            if len(parts) < 3:
+                print(f"Skipping: {file} (invalid format)")
+                continue
 
-    try:
-        text = recognizer.recognize_google(audio_data)
-        return text
-    except sr.UnknownValueError:
-        return "[Unintelligible or silent audio]"
-    except sr.RequestError as e:
-        return f"[Could not request results; {e}]"
-    finally:
-        if os.path.exists(wav_path):
-            os.remove(wav_path)  # Clean up
+            name_part, date_part, time_part = parts
+            try:
+                date_obj = datetime.strptime(date_part, "%d%m%y")
+            except ValueError as e:
+                print(f"Skipping {file}: invalid date format → {e}")
+                continue
 
-# Example usage:
-text = transcribe_audio("D:/SUB/NubeEra_work/CalllogsAIProj/record_out.m4a")
-print("Transcript:\n", text)
+            month_folder = date_obj.strftime("%b_%Y").lower()
+            person = name_part.strip().replace("+91", "").replace(" ", "_")
+            dest_folder = os.path.join(destination_base, person, month_folder)
+
+            os.makedirs(dest_folder, exist_ok=True)
+            shutil.copy(os.path.join(source_folder, file), os.path.join(dest_folder, file))
+            print(f"Copied: {file} → {dest_folder}")
+
+def upload_to_drive():
+    subprocess.run([
+        "rclone", "copy", destination_base, "gdrive:CallRecordings", "--create-empty-src-dirs"
+    ])
+
+organize_recordings()
+upload_to_drive()
